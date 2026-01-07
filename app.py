@@ -1,112 +1,114 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import plotly.express as px
 
-st.set_page_config(page_title="晏駒的 2026 資產配置", layout="wide")
+st.set_page_config(page_title="晏駒的 2026 資產決策中心", layout="wide")
 
 st.title("📊 晏駒的資產配置決策中心")
-st.write("同步追蹤股市、加密貨幣與選擇權權利金")
 
-# --- 1. 設定目標配置比例 (根據 2026 佈局建議) ---
-# 你可以在這裡調整你理想中的比例
-targets = {
-    "BTC/ETH": 0.15,   # 加密貨幣佔 15%
-    "VEA": 0.20,       # 已開發市場 ETF
-    "TSLA": 0.10,      # 特斯拉
-    "CVX": 0.05,       # 雪佛龍 (能源防守)
-    "ONDS": 0.05,      # 成長型小盤股
-    "OPTIONS": 0.20,   # 選擇權操作資金
-    "CASH": 0.25       # 現金儲備 (包含 TWD)
+# --- 1. 設定目標配置比例 (2026 佈局規劃) ---
+# 你可以隨時在這裡微調你的理想比例
+target_config = {
+    "BTC/ETH": 0.15, "VEA": 0.15, "TSLA": 0.10, "CVX": 0.05, 
+    "ONDS": 0.05, "00830.TW": 0.10, "2362.TW": 0.05, "6748.TW": 0.05,
+    "OPTIONS": 0.15, "CASH": 0.15
 }
 
-# --- 修改後的 2. 抓取即時數據 ---
+# --- 2. 抓取即時數據 (包含新加入的台股) ---
 @st.cache_data(ttl=300)
-def get_all_data():
-    tickers = ["VEA", "TSLA", "CVX", "ONDS", "BTC-USD", "ETH-USD", "TWDUSD=X"]
-    # 改用 period="5d" 確保一定能抓到最近一個有交易的收盤價
+def get_live_prices():
+    tickers = ["VEA", "TSLA", "CVX", "ONDS", "00830.TW", "2362.TW", "6748.TW", "BTC-USD", "TWDUSD=X"]
     df = yf.download(tickers, period="5d", group_by='ticker')
-    
-    latest_prices = {}
+    latest = {}
     for t in tickers:
-        # 抓取該標的最後一個不是 nan 的數值
         series = df[t]['Close'].dropna()
-        if not series.empty:
-            latest_prices[t] = series.iloc[-1]
-        else:
-            latest_prices[t] = 0.0 # 若真的抓不到則給 0
-            
-    return latest_prices
+        latest[t] = series.iloc[-1] if not series.empty else 0.0
+    return latest
 
-# 呼叫方式保持不變
-try:
-    prices = get_all_data()
-    usd_twd = 1 / prices["TWDUSD=X"] 
-except Exception as e:
-    st.error(f"數據抓取失敗: {e}")
-    st.stop()
+prices = get_live_prices()
+usd_twd = 1 / prices["TWDUSD=X"]
 
-# --- 3. 輸入目前持倉 ---
-st.sidebar.header("📝 目前持倉數據")
-st.sidebar.subheader("加密貨幣")
-# 因為你提供的是總額，這裡讓你輸入目前 BTC+ETH 的總價值
-crypto_val = st.sidebar.number_input("BTC + ETH 總市值 (USD)", value=3750.0)
+# --- 3. 互動式持股調整區 ---
+st.subheader("📝 實時持股調整")
+st.info("直接在下方表格的『持有數量』欄位輸入新數字，全站數據會同步計算。")
 
-st.sidebar.subheader("美股持倉 (股數)")
-shares_vea = st.sidebar.number_input("VEA 股數", value=25.0)
-shares_onds = st.sidebar.number_input("ONDS 股數", value=50.0)
-shares_cvx = st.sidebar.number_input("CVX 股數", value=6.0)
-shares_tsla = st.sidebar.number_input("TSLA 股數", value=7.5)
-
-st.sidebar.subheader("其他資產")
-options_val = st.sidebar.number_input("選擇權部位價值 (USD)", value=3000.0)
-cash_usd = st.sidebar.number_input("美金現金", value=1730.0)
-cash_twd = st.sidebar.number_input("台幣現金", value=140000.0)
-
-# --- 4. 資產計算邏輯 ---
-# 統一換算為 USD
-cash_twd_in_usd = cash_twd / usd_twd
-total_cash_usd = cash_usd + cash_twd_in_usd
-
-assets = [
-    {"名稱": "BTC/ETH", "市值(USD)": crypto_val, "類別": "加密貨幣"},
-    {"名稱": "VEA", "市值(USD)": shares_vea * prices["VEA"], "類別": "ETF"},
-    {"名稱": "TSLA", "市值(USD)": shares_tsla * prices["TSLA"], "類別": "個股"},
-    {"名稱": "CVX", "市值(USD)": shares_cvx * prices["CVX"], "類別": "個股"},
-    {"名稱": "ONDS", "市值(USD)": shares_onds * prices["ONDS"], "類別": "個股"},
-    {"名稱": "OPTIONS", "市值(USD)": options_val, "類別": "選擇權"},
-    {"名稱": "CASH", "市值(USD)": total_cash_usd, "類別": "現金"}
+# 初始化數據框架
+initial_data = [
+    {"項目": "VEA", "類別": "美股ETF", "持有數量": 25.0, "單位": "股"},
+    {"項目": "TSLA", "類別": "美股個股", "持有數量": 7.5, "單位": "股"},
+    {"項目": "CVX", "類別": "美股個股", "持有數量": 6.0, "單位": "股"},
+    {"項目": "ONDS", "類別": "美股個股", "持有數量": 50.0, "單位": "股"},
+    {"項目": "00830.TW", "類別": "台股ETF", "持有數量": 873.0, "單位": "股"},
+    {"項目": "2362.TW", "類別": "台股個股", "持有數量": 500.0, "單位": "股"},
+    {"項目": "6748.TW", "類別": "台股個股", "持有數量": 500.0, "單位": "股"},
+    {"項目": "BTC/ETH", "類別": "加密貨幣", "持有數量": 3750.0, "單位": "USD總額"},
+    {"項目": "OPTIONS", "類別": "選擇權", "持有數量": 3000.0, "單位": "USD總額"},
+    {"項目": "CASH_USD", "類別": "現金", "持有數量": 1730.0, "單位": "USD"},
+    {"項目": "CASH_TWD", "類別": "現金", "持有數量": 140000.0, "單位": "TWD"},
 ]
 
-total_portfolio_value = sum(item["市值(USD)"] for item in assets)
+# 顯示可編輯表格
+edited_df = st.data_editor(pd.DataFrame(initial_data), hide_index=True, use_container_width=True)
 
-# --- 5. 計算調整建議 ---
-results = []
-for item in assets:
-    name = item["名稱"]
-    current_val = item["市值(USD)"]
-    current_pct = current_val / total_portfolio_value
-    target_pct = targets[name]
-    target_val = total_portfolio_value * target_pct
-    diff = target_val - current_val
+# --- 4. 計算資產現況 ---
+final_assets = []
+total_usd = 0
+
+for _, row in edited_df.iterrows():
+    name = row["項目"]
+    qty = row["持有數量"]
+    val_usd = 0
     
-    results.append({
-        "項目": name,
-        "目前市值": f"${current_val:,.2f}",
-        "目前比例": f"{current_pct*100:.1f}%",
-        "目標比例": f"{target_pct*100:.1f}%",
-        "需調整金額": f"{'+' if diff > 0 else ''}${diff:,.2f}",
-        "狀態": "✅ 達標" if abs(current_pct - target_pct) < 0.02 else ("🔼 補倉" if diff > 0 else "🔽 減碼")
-    })
+    if name in ["BTC/ETH", "OPTIONS", "CASH_USD"]:
+        val_usd = qty
+    elif name == "CASH_TWD":
+        val_usd = qty / usd_twd
+    elif ".TW" in name:
+        val_usd = (qty * prices[name]) / usd_twd # 台股轉美金
+    else:
+        val_usd = qty * prices[name] # 美股
+    
+    total_usd += val_usd
+    final_assets.append({"項目": name, "市值_USD": val_usd})
 
-# --- 6. 顯示結果介面 ---
-col1, col2, col3 = st.columns(3)
-col1.metric("總資產 (USD)", f"${total_portfolio_value:,.2f}")
-col2.metric("台幣匯率", f"{usd_twd:.2f}")
-col3.metric("比特幣價格", f"${prices['BTC-USD']:,.0f}")
+# 整合現金類別以利畫圖
+plot_df = pd.DataFrame(final_assets)
 
-st.write("### ⚖️ 配置平衡表")
-df = pd.DataFrame(results)
-st.table(df)
+# --- 5. 視覺化展示 ---
+col1, col2 = st.columns([1, 1])
 
-st.success(f"💡 貼心提醒：你目前的台幣 14 萬約等於 {cash_twd_in_usd:,.2f} 美金。")
-st.info("目前的流：當『狀態』顯示補倉時，優先使用現金買入；當顯示減碼時，可以考慮賣出部分或針對該標的操作 Covered Call 賺取權利金。")
+with col1:
+    st.write(f"### 💰 總資產估值: ${total_usd:,.2f} USD")
+    st.write(f"約合台幣: NT$ {total_usd * usd_twd:,.0f}")
+    
+    # 圓餅圖
+    fig = px.pie(plot_df, values='市值_USD', names='項目', title="資產分佈比例", hole=0.4)
+    st.plotly_chart(fig, use_container_width=True)
+
+with col2:
+    st.write("### ⚖️ 配置平衡分析")
+    rebalance_data = []
+    # 這裡將 CASH_USD 和 CASH_TWD 合併計算
+    actual_cash = sum(d["市值_USD"] for d in final_assets if "CASH" in d["項目"])
+    
+    for name, target_pct in target_config.items():
+        # 找出該項目的目前總值
+        if name == "CASH":
+            current_val = actual_cash
+        else:
+            current_val = sum(d["市值_USD"] for d in final_assets if d["項目"] == name)
+            
+        current_pct = current_val / total_usd
+        diff = (total_usd * target_pct) - current_val
+        
+        rebalance_data.append({
+            "標的": name,
+            "目前比例": f"{current_pct*100:.1f}%",
+            "目標比例": f"{target_pct*100:.1f}%",
+            "建議調整": f"{'+' if diff > 0 else ''}${diff:,.0f}"
+        })
+    
+    st.table(pd.DataFrame(rebalance_data))
+
+st.success("💡 操作流提醒：當你買入新股票時，更新『持有數量』，系統會自動告訴你目前的現金比例是否還在目標範圍內。")
