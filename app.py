@@ -19,18 +19,30 @@ targets = {
     "CASH": 0.25       # 現金儲備 (包含 TWD)
 }
 
-# --- 2. 抓取即時數據 (股市、加密貨幣、匯率) ---
-@st.cache_data(ttl=300) # 每 5 分鐘更新一次
+# --- 修改後的 2. 抓取即時數據 ---
+@st.cache_data(ttl=300)
 def get_all_data():
     tickers = ["VEA", "TSLA", "CVX", "ONDS", "BTC-USD", "ETH-USD", "TWDUSD=X"]
-    data = yf.download(tickers, period="1d")['Close'].iloc[-1]
-    return data
+    # 改用 period="5d" 確保一定能抓到最近一個有交易的收盤價
+    df = yf.download(tickers, period="5d", group_by='ticker')
+    
+    latest_prices = {}
+    for t in tickers:
+        # 抓取該標的最後一個不是 nan 的數值
+        series = df[t]['Close'].dropna()
+        if not series.empty:
+            latest_prices[t] = series.iloc[-1]
+        else:
+            latest_prices[t] = 0.0 # 若真的抓不到則給 0
+            
+    return latest_prices
 
+# 呼叫方式保持不變
 try:
     prices = get_all_data()
-    usd_twd = 1 / prices["TWDUSD=X"] # 取得 1 美金兌換台幣匯率
-except:
-    st.error("無法抓取即時數據，請稍後再試。")
+    usd_twd = 1 / prices["TWDUSD=X"] 
+except Exception as e:
+    st.error(f"數據抓取失敗: {e}")
     st.stop()
 
 # --- 3. 輸入目前持倉 ---
